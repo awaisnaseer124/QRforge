@@ -45,13 +45,14 @@ fun GenerateScreen(
     viewModel: GenerateViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val isPro   by viewModel.isPro.collectAsStateWithLifecycle(initialValue = false)
     val context = LocalContext.current
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(uiState.saveSuccess) {
         if (uiState.saveSuccess) {
-            snackbarHostState.showSnackbar("QR saved to gallery!")
+            snackbarHostState.showSnackbar(uiState.saveSuccessMessage)
             viewModel.dismissSaveSuccess()
         }
     }
@@ -62,7 +63,6 @@ fun GenerateScreen(
         }
     }
 
-    // Rewarded ad offer dialog
     if (uiState.showRewardedAdOffer) {
         RewardedAdOfferDialog(
             onWatch   = { viewModel.watchRewardedAd(context as Activity) },
@@ -95,7 +95,7 @@ fun GenerateScreen(
                 .padding(padding)
                 .verticalScroll(scrollState)
         ) {
-            // QR Type Selector
+            // ── Type Selector ─────────────────────────────────────────
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -115,7 +115,7 @@ fun GenerateScreen(
                 }
             }
 
-            // Input Fields
+            // ── Input Fields ──────────────────────────────────────────
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -146,7 +146,7 @@ fun GenerateScreen(
 
             Spacer(Modifier.height(20.dp))
 
-            // Color Picker
+            // ── Color Picker ──────────────────────────────────────────
             Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                 Text("QR Color",
                     style = MaterialTheme.typography.labelLarge,
@@ -161,11 +161,9 @@ fun GenerateScreen(
                                 .size(36.dp)
                                 .clip(CircleShape)
                                 .background(Color(android.graphics.Color.parseColor(hex)))
-                                .then(
-                                    if (isSelected) Modifier.border(3.dp,
-                                        MaterialTheme.colorScheme.primary, CircleShape)
-                                    else Modifier
-                                )
+                                .then(if (isSelected) Modifier.border(3.dp,
+                                    MaterialTheme.colorScheme.primary, CircleShape)
+                                else Modifier)
                                 .clickable { viewModel.onColorSelected(hex) }
                         ) {
                             if (isSelected) {
@@ -179,9 +177,26 @@ fun GenerateScreen(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(20.dp))
 
-            // QR Preview Card
+            // ── Branding Panel (Pro) ──────────────────────────────────
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            Spacer(Modifier.height(16.dp))
+
+            BrandingPanel(
+                logoBitmap       = uiState.logoBitmap,
+                selectedFrameId  = uiState.selectedFrameId,
+                onLogoSelected   = { viewModel.onLogoSelected(it) },
+                onFrameSelected  = { viewModel.onFrameSelected(it) },
+                onNavigateToPro  = onNavigateToPro,
+                isPro            = isPro
+            )
+
+            Spacer(Modifier.height(20.dp))
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            Spacer(Modifier.height(20.dp))
+
+            // ── QR Preview ────────────────────────────────────────────
             Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 shape = RoundedCornerShape(20.dp),
@@ -209,9 +224,9 @@ fun GenerateScreen(
                                     color = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(40.dp))
                             }
-                            uiState.qrBitmap != null -> {
+                            uiState.finalBitmap != null -> {
                                 Image(
-                                    bitmap = uiState.qrBitmap!!.asImageBitmap(),
+                                    bitmap = uiState.finalBitmap!!.asImageBitmap(),
                                     contentDescription = "Generated QR Code",
                                     modifier = Modifier.fillMaxSize().padding(8.dp))
                             }
@@ -227,42 +242,65 @@ fun GenerateScreen(
                             }
                         }
                     }
+
+                    // Export format buttons
                     Spacer(Modifier.height(16.dp))
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        OutlinedButton(onClick = { viewModel.saveToGallery(context) },
-                            enabled = uiState.qrBitmap != null,
+                        OutlinedButton(
+                            onClick = { viewModel.saveToGallery(context) },
+                            enabled = uiState.finalBitmap != null,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(10.dp)
-                        ) { Text("PNG") }
-                        OutlinedButton(onClick = onNavigateToPro,
+                        ) { Text("PNG", maxLines = 1, softWrap = false) }
+
+                        OutlinedButton(
+                            onClick = {
+                                if (isPro) viewModel.exportSvg(context)
+                                else onNavigateToPro()
+                            },
+                            enabled = uiState.finalBitmap != null,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
+                            colors = if (isPro) ButtonDefaults.outlinedButtonColors()
+                            else ButtonDefaults.outlinedButtonColors(
                                 contentColor = MaterialTheme.colorScheme.secondary)
-                        ) { Text("SVG Pro") }
-                        OutlinedButton(onClick = onNavigateToPro,
+                        ) {
+                            Text(if (isPro) "SVG" else "SVG Pro",
+                                maxLines = 1, softWrap = false)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                if (isPro) viewModel.exportPdf(context)
+                                else onNavigateToPro()
+                            },
+                            enabled = uiState.finalBitmap != null,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
+                            colors = if (isPro) ButtonDefaults.outlinedButtonColors()
+                            else ButtonDefaults.outlinedButtonColors(
                                 contentColor = MaterialTheme.colorScheme.secondary)
-                        ) { Text("PDF Pro") }
+                        ) {
+                            Text(if (isPro) "PDF" else "PDF Pro",
+                                maxLines = 1, softWrap = false)
+                        }
                     }
                 }
             }
 
             Spacer(Modifier.height(16.dp))
 
-            // Action Buttons
+            // ── Action Buttons ────────────────────────────────────────
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Button(
                     onClick = { viewModel.saveToGallery(context) },
-                    enabled = uiState.qrBitmap != null,
+                    enabled = uiState.finalBitmap != null,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(14.dp)
                 ) {
@@ -271,9 +309,10 @@ fun GenerateScreen(
                     Text("Download PNG", style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold)
                 }
+
                 OutlinedButton(
                     onClick = { viewModel.shareQR(context) },
-                    enabled = uiState.qrBitmap != null,
+                    enabled = uiState.finalBitmap != null,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(14.dp)
                 ) {
@@ -282,9 +321,8 @@ fun GenerateScreen(
                     Text("Share", style = MaterialTheme.typography.titleMedium)
                 }
 
-                // Daily limit indicator
                 val effectiveLimit = uiState.dailyLimit + uiState.bonusQRs
-                if (uiState.dailyQRCount > 0 || uiState.bonusQRs > 0) {
+                if (!isPro && (uiState.dailyQRCount > 0 || uiState.bonusQRs > 0)) {
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.secondaryContainer),
@@ -312,9 +350,12 @@ fun GenerateScreen(
                 }
             }
 
-            // Banner ad at bottom (free users only)
-            Spacer(Modifier.height(12.dp))
-            HomeBannerAd(modifier = Modifier.padding(horizontal = 16.dp))
+            // Banner ad — free users only
+            if (!isPro) {
+                Spacer(Modifier.height(12.dp))
+                HomeBannerAd(modifier = Modifier.padding(horizontal = 16.dp))
+            }
+
             Spacer(Modifier.height(32.dp))
         }
     }
@@ -330,8 +371,7 @@ private fun RewardedAdOfferDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(20.dp),
         title = {
-            Text("Daily limit reached",
-                style = MaterialTheme.typography.titleLarge,
+            Text("Daily limit reached", style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold)
         },
         text = {
@@ -339,22 +379,17 @@ private fun RewardedAdOfferDialog(
                 style = MaterialTheme.typography.bodyMedium)
         },
         confirmButton = {
-            Button(
-                onClick = onWatch,
-                shape = RoundedCornerShape(12.dp)
-            ) {
+            Button(onClick = onWatch, shape = RoundedCornerShape(12.dp)) {
                 Text("Watch Ad (+2 QRs)")
             }
         },
         dismissButton = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton(onClick = onUpgrade) {
-                    Text("Upgrade to Pro",
-                        color = MaterialTheme.colorScheme.secondary)
+                    Text("Upgrade to Pro", color = MaterialTheme.colorScheme.secondary)
                 }
                 TextButton(onClick = onDismiss) {
-                    Text("Maybe later",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Maybe later", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
